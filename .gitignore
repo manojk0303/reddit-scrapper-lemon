@@ -2,7 +2,7 @@
 venv/
 VENV/
 .env/
-
+.env
 # Ignore credentials file
 credentials.json
 
