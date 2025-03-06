@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import asyncio
 import yaml
 import os
@@ -19,9 +19,13 @@ app = Flask(__name__)
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
-# Global variable to track if scraping is in progress
+# Global variables to track scraping state
 is_scraping = False
 latest_results = []
+current_config = {
+    "search_keywords": [],
+    "target_subreddits": []
+}
 
 @app.route('/')
 def index():
@@ -29,13 +33,35 @@ def index():
 
 @app.route('/start_scrape', methods=['POST'])
 def start_scrape():
-    global is_scraping, latest_results
+    global is_scraping, latest_results, current_config
     
     if is_scraping:
         return jsonify({
             'status': 'error',
             'message': 'A scraping operation is already in progress'
         })
+    
+    # Get configuration from request
+    data = request.json
+    keywords = data.get('keywords', [])
+    subreddits = data.get('subreddits', [])
+    
+    # Validate keywords
+    if not keywords:
+        return jsonify({
+            'status': 'error',
+            'message': 'Please provide at least one keyword'
+        })
+    
+    # Update current configuration
+    current_config = {
+        "search_keywords": keywords,
+        "target_subreddits": subreddits
+    }
+    
+    # Update config.yaml
+    with open("config.yaml", "w") as f:
+        yaml.dump(current_config, f)
     
     is_scraping = True
     latest_results = []
@@ -58,23 +84,24 @@ def get_status():
         'results': latest_results
     })
 
+@app.route('/get_spreadsheet_url', methods=['GET'])
+def get_spreadsheet_url():
+    try:
+        # Initialize scraper to get the URL
+        reddit_scraper = RedditScraper()
+        url = reddit_scraper.get_spreadsheet_url()
+        return jsonify({
+            'url': url
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        })
+
 async def scrape_and_update():
-    global is_scraping, latest_results
+    global is_scraping, latest_results, current_config
     
     try:
-        # Load configuration or create it from environment variables if it doesn't exist
-        config_path = "config.yaml"
-        if not os.path.exists(config_path):
-            # Create config from environment variables
-            config = {
-                "search_keywords": os.environ.get("SEARCH_KEYWORDS", "").split(","),
-                "target_subreddits": os.environ.get("TARGET_SUBREDDITS", "").split(",")
-            }
-        else:
-            # Load from file
-            with open(config_path) as f:
-                config = yaml.safe_load(f)
-        
         # Initialize scraper
         reddit_scraper = RedditScraper()
         all_results = []
@@ -83,7 +110,11 @@ async def scrape_and_update():
             # Initialize the Reddit client
             await reddit_scraper.initialize()
             
-            for keyword in config["search_keywords"]:
+            # If subreddits are specified in the config, update the scraper
+            if current_config["target_subreddits"]:
+                reddit_scraper.subreddits = current_config["target_subreddits"]
+            
+            for keyword in current_config["search_keywords"]:
                 results = await reddit_scraper.scrape(keyword)
                 all_results.extend(results)
                 
@@ -138,6 +169,15 @@ def check_paths():
 if __name__ == "__main__":
     # Check paths for debugging
     check_paths()
+    
+    # Create config.yaml if it doesn't exist
+    if not os.path.exists("config.yaml"):
+        default_config = {
+            "search_keywords": os.environ.get("SEARCH_KEYWORDS", "").split(","),
+            "target_subreddits": os.environ.get("TARGET_SUBREDDITS", "").split(",")
+        }
+        with open("config.yaml", "w") as f:
+            yaml.dump(default_config, f)
     
     # Start the asyncio event loop in a background thread
     import threading

@@ -12,12 +12,16 @@ class RedditScraper(BaseScraper):
         try:
             with open("config.yaml") as f:
                 config = yaml.safe_load(f)
-            self.subreddits = config["target_subreddits"]
+            self.subreddits = config.get("target_subreddits", [])
+            # Filter out empty strings
+            self.subreddits = [s for s in self.subreddits if s.strip()]
         except (FileNotFoundError, KeyError):
             # Use environment variables as fallback
-            self.subreddits = os.environ.get("TARGET_SUBREDDITS", "").split(",")
+            subreddits_env = os.environ.get("TARGET_SUBREDDITS", "")
+            self.subreddits = [s.strip() for s in subreddits_env.split(",") if s.strip()]
         
         self.reddit = None
+        self.logger.info(f"Initialized with subreddits: {self.subreddits}")
         
     async def initialize(self):
         """Initialize the Reddit client using environment variables if available"""
@@ -40,6 +44,34 @@ class RedditScraper(BaseScraper):
             await self.initialize()
             
         results = []
+        
+        # If no subreddits specified, search all of Reddit
+        if not self.subreddits:
+            self.logger.info(f"Searching all of Reddit for '{keyword}'")
+            
+            # Use Reddit's site-wide search - FIX: Wait for the subreddit coroutine to complete
+            subreddit = await self.reddit.subreddit("all")
+            async for submission in subreddit.search(query=keyword, sort="new", limit=20):
+                # Convert UTC timestamp to human-readable date and time
+                created_date = datetime.datetime.fromtimestamp(submission.created_utc)
+                human_readable_date = created_date.strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Get the subreddit name
+                subreddit_name = submission.subreddit.display_name
+                
+                results.append([
+                    submission.title,
+                    submission.selftext[:500] + "..." if len(submission.selftext) > 500 else submission.selftext,
+                    submission.url,
+                    f"reddit/r/{subreddit_name}",
+                    human_readable_date,
+                    keyword
+                ])
+            
+            self.logger.info(f"Found {len(results)} results across all of Reddit")
+            return results
+            
+        # Search specific subreddits
         self.logger.info(f"Searching for '{keyword}' in {len(self.subreddits)} subreddits")
         
         for subreddit_name in self.subreddits:
@@ -49,6 +81,7 @@ class RedditScraper(BaseScraper):
                     continue
                     
                 self.logger.info(f"Searching in r/{subreddit_name}")
+                # FIX: Wait for the subreddit coroutine to complete
                 subreddit = await self.reddit.subreddit(subreddit_name)
                 
                 search_count = 0
@@ -64,8 +97,8 @@ class RedditScraper(BaseScraper):
                         submission.selftext[:500] + "..." if len(submission.selftext) > 500 else submission.selftext,
                         submission.url,
                         f"reddit/r/{subreddit_name}",
-                        human_readable_date,  # Human-readable date format
-                        keyword  # Add the keyword as an additional column
+                        human_readable_date,
+                        keyword
                     ])
                 
                 self.logger.info(f"Found {search_count} results in r/{subreddit_name}")
