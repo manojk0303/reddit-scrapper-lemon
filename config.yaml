@@ -1,0 +1,20 @@
+search_keywords:
+  - "transactional email"
+  - "email delivery issues"
+  - "email spam problem"
+  - "SMTP configuration"
+  - "email API"
+  - "email newsletter"
+  - "email marketing"
+
+target_subreddits:
+  - "EmailMarketing"
+  - "TechSupport"
+  - "Startups"
+  - "SaaS"
+  - "EmailNewsletter"
+
+twitter_search_params:
+  min_replies: 1
+  min_retweets: 0
+  lang: "en"

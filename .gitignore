@@ -1,0 +1,13 @@
+# Ignore virtual environment
+venv/
+VENV/
+.env/
+
+# Ignore credentials file
+credentials.json
+
+# Ignore system-specific files
+*.pyc
+__pycache__/
+.DS_Store
+Thumbs.db

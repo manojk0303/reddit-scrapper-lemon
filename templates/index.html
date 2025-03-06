@@ -1,0 +1,62 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reddit Data Scraper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Reddit Data Scraper</h1>
+            <p>Scrape Reddit data and update your Google Sheet</p>
+        </div>
+        
+        <div class="main">
+            <div class="card">
+                <h2>Start Scraping</h2>
+                <p>Click the button below to start scraping Reddit data based on the configured keywords.</p>
+                <button id="scrapeButton" class="btn-primary">Start Scraping</button>
+                <div id="status" class="status-container">
+                    <p id="statusMessage">Ready to scrape</p>
+                    <div id="loadingSpinner" class="spinner hidden"></div>
+                </div>
+            </div>
+            
+            <div class="card results-container hidden" id="resultsCard">
+                <h2>Latest Results</h2>
+                <p id="resultCount">0 results found</p>
+                <div class="table-container">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Content</th>
+                                <th>URL</th>
+                                <th>Source</th>
+                                <th>Date</th>
+                                <th>Keyword</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <!-- Results will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+                <p class="spreadsheet-link">
+                    View complete results in 
+                    <a href="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID" id="sheetLink" target="_blank">Google Sheets</a>
+                </p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© 2025 Lemon Leads - Made with 🍋</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
