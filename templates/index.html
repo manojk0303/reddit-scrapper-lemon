@@ -1,54 +1,103 @@
-<!-- templates/index.html --><!DOCTYPE html>
+<!-- templates/index.html -->
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Reddit Data Scraper</title>
-        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Reddit Data Scraper</h1>
-                <p>Scrape Reddit data and update your Google Sheet</p>
-            </div>
-            
-            <div class="main">
-                <div class="card">
-                    <h2>Configure Scraper</h2>
-                    <div class="config-form">
-                        <div class="form-group">
-                            <label for="keywords">Keywords (comma separated):</label>
-                            <input type="text" id="keywords" placeholder="e.g. marketing, analytics, SEO" class="form-input">
-                        </div>
-                        <div class="form-group">
-                            <label for="subreddits">Target Subreddits (comma separated):</label>
-                            <input type="text" id="subreddits" placeholder="e.g. marketing, smallbusiness, entrepreneur" class="form-input">
-                            <div class="form-help">
-                                <small>Leave empty to search all of Reddit</small>
-                            </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reddit Data Scraper for Marketing</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Reddit Data Scraper for Marketing</h1>
+            <p>Identify trends, audiences, and content opportunities from Reddit</p>
+        </div>
+
+        <div class="main">
+            <div class="card">
+                <h2>Configure Scraper</h2>
+                <div class="config-form">
+                    <div class="form-group">
+                        <label for="keywords">Keywords (comma separated):</label>
+                        <input type="text" id="keywords" placeholder="e.g. marketing, analytics, SEO" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="subreddits">Target Subreddits (comma separated):</label>
+                        <input type="text" id="subreddits" placeholder="e.g. marketing, smallbusiness, entrepreneur" class="form-input">
+                        <div class="form-help">
+                            <small>Leave empty to search all of Reddit</small>
                         </div>
                     </div>
-                    <button id="scrapeButton" class="btn-primary">Start Scraping</button>
-                    <div id="status" class="status-container">
-                        <p id="statusMessage">Ready to scrape</p>
-                        <div id="loadingSpinner" class="spinner hidden"></div>
+                    <div class="form-group">
+                        <label for="postLimit">Number of posts to fetch (per keyword/subreddit):</label>
+                        <input type="number" id="postLimit" value="50" min="1" max="500" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="timeFilter">Time period:</label>
+                        <select id="timeFilter" class="form-input">
+                            <option value="day">Past 24 hours</option>
+                            <option value="week">Past week</option>
+                            <option value="month" selected>Past month</option>
+                            <option value="year">Past year</option>
+                            <option value="all">All time</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="sortBy">Sort by:</label>
+                        <select id="sortBy" class="form-input">
+                            <option value="relevance" selected>Relevance</option>
+                            <option value="hot">Hot</option>
+                            <option value="new">New</option>
+                            <option value="top">Top</option>
+                            <option value="comments">Most comments</option>
+                        </select>
                     </div>
                 </div>
+                <button id="scrapeButton" class="btn-primary">Start Scraping</button>
+                <div id="status" class="status-container">
+                    <p id="statusMessage">Ready to scrape</p>
+                    <div id="loadingSpinner" class="spinner hidden"></div>
+                </div>
+            </div>
+
+            <div class="card results-container hidden" id="resultsCard">
+                <div class="results-header">
+                    <h2>Results</h2>
+                    <div class="results-controls">
+                        <button id="exportCSV" class="btn-secondary">Export to CSV</button>
+                        <input type="text" id="searchResults" placeholder="Filter results..." class="search-input">
+                    </div>
+                </div>
+                <p id="resultCount">0 results found</p>
                 
-                <div class="card results-container hidden" id="resultsCard">
-                    <h2>Latest Results</h2>
-                    <p id="resultCount">0 results found</p>
+                <div class="insights-panel">
+                    <h3>Marketing Insights</h3>
+                    <div class="insights-container" id="insightsContainer">
+                        <!-- Insights will be populated here -->
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="posts">Posts</button>
+                    <button class="tab-btn" data-tab="engagement">Engagement Analysis</button>
+                    <button class="tab-btn" data-tab="sentiment">Sentiment Analysis</button>
+                </div>
+
+                <div class="tab-content active" id="postsTab">
                     <div class="table-container">
                         <table id="resultsTable">
                             <thead>
                                 <tr>
                                     <th>Title</th>
                                     <th>Content</th>
+                                    <th>Subreddit</th>
                                     <th>URL</th>
-                                    <th>Source</th>
+                                    <th>Upvotes</th>
+                                    <th>Comments</th>
                                     <th>Date</th>
                                     <th>Keyword</th>
+                                    <th>Sentiment</th>
                                 </tr>
                             </thead>
                             <tbody id="resultsBody">
@@ -56,17 +105,36 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="spreadsheet-link">
-                        View complete results in 
-                        <a href="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID" id="sheetLink" target="_blank">Google Sheets</a>
-                    </p>
+                </div>
+
+                <div class="tab-content" id="engagementTab">
+                    <div class="chart-container">
+                        <div class="chart" id="engagementChart">
+                            <!-- Engagement chart will be rendered here -->
+                        </div>
+                        <div class="engagement-stats" id="engagementStats">
+                            <!-- Engagement statistics will be shown here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="sentimentTab">
+                    <div class="chart-container">
+                        <div class="chart" id="sentimentChart">
+                            <!-- Sentiment chart will be rendered here -->
+                        </div>
+                        <div class="sentiment-breakdown" id="sentimentBreakdown">
+                            <!-- Sentiment breakdown will be shown here -->
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="footer">
-                <p>© 2025 Lemon Leads - Made with 🍋</p>
-            </div>
         </div>
-        <script src="{{ url_for('static', filename='script.js') }}"></script>
-    </body>
-    </html>
+
+        <div class="footer">
+            <p>© 2025 Lemon Leads - Made with 🍋</p>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

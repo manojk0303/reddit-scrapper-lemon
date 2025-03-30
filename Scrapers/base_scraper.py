@@ -1,139 +1,131 @@
-# Scrapers/base_scraper.py
-from abc import ABC, abstractmethod
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+# base_scraper.py
+import time
+import requests
+from bs4 import BeautifulSoup
 import logging
-from gspread.exceptions import APIError
-import os
-import json
 
-class BaseScraper(ABC):
-    def __init__(self):
-        # Set up logging
+class BaseScraper:
+    """Base class for web scrapers with common functionality."""
+    
+    def __init__(self, headers=None):
+        """
+        Initialize the scraper with request headers.
+        
+        Args:
+            headers (dict): Optional request headers
+        """
+        self.headers = headers or {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+        
+        # Configure logging
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger('scraper')
+    
+    def make_request(self, url, params=None, retries=3, delay=1):
+        """
+        Make an HTTP request with retries.
         
-        # Get Google Sheet name from environment variables or use default
-        self.sheet_name = os.environ.get("GOOGLE_SHEET_NAME", "Lemon Leads")
-        
-        # Connect to Google Sheets
-        self.scope = ["https://spreadsheets.google.com/feeds",
-                     "https://www.googleapis.com/auth/drive"]
-        try:
-            # Check if credentials are provided as environment variables
-            if "GOOGLE_CREDENTIALS" in os.environ:
-                # Create credentials.json from environment variable
-                creds_json = os.environ.get("GOOGLE_CREDENTIALS")
-                
-                # If a file path was provided, load it
-                if os.path.exists(creds_json):
-                    self.creds = ServiceAccountCredentials.from_json_keyfile_name(
-                        creds_json, self.scope)
+        Args:
+            url (str): The URL to request
+            params (dict): Optional query parameters
+            retries (int): Number of retries on failure
+            delay (float): Delay between retries in seconds
+            
+        Returns:
+            requests.Response: The response object
+        """
+        for attempt in range(retries):
+            try:
+                response = self.session.get(url, params=params, timeout=10)
+                response.raise_for_status()
+                return response
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Request failed (attempt {attempt+1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    time.sleep(delay)
                 else:
-                    # Otherwise, try to parse as JSON string
-                    try:
-                        creds_data = json.loads(creds_json)
-                        # Write to a temporary file - needed for ServiceAccountCredentials
-                        with open("temp_credentials.json", "w") as f:
-                            json.dump(creds_data, f)
-                        self.creds = ServiceAccountCredentials.from_json_keyfile_name(
-                            "temp_credentials.json", self.scope)
-                    except json.JSONDecodeError:
-                        self.logger.error("Invalid JSON in GOOGLE_CREDENTIALS environment variable")
-                        raise
-            else:
-                # Fall back to credentials.json file
-                self.creds = ServiceAccountCredentials.from_json_keyfile_name(
-                    "credentials.json", self.scope)
-                
-            self.client = gspread.authorize(self.creds)
-            self.spreadsheet = self.client.open(self.sheet_name)
-            self.sheet = self.spreadsheet.sheet1
-            self.logger.info("Successfully connected to Google Sheet")
-        except Exception as e:
-            self.logger.error(f"Error connecting to Google Sheet: {e}")
-            raise
+                    self.logger.error(f"Failed to retrieve {url} after {retries} attempts")
+                    raise
     
-    @abstractmethod
-    async def initialize(self):
-        """Initialize any connections or authentication needed for the scraper"""
-        pass
-    
-    @abstractmethod
-    async def scrape(self, keyword):
-        """Scrape data based on the given keyword"""
-        pass
-    
-    @abstractmethod
-    async def close(self):
-        """Close any open connections"""
-        pass
-    
-    def get_spreadsheet_url(self):
-        """Get the URL of the spreadsheet"""
-        return f"https://docs.google.com/spreadsheets/d/{self.spreadsheet.id}"
-    
-    def save_to_sheet(self, data):
-        """Save a single row of data to the Google Sheet"""
-        try:
-            self.sheet.append_row(data)
-            return True
-        except Exception as e:
-            self.logger.error(f"Error saving data to sheet: {e}")
-            return False
-    
-    def get_all_data(self):
-        """Get all existing data from the sheet"""
-        try:
-            return self.sheet.get_all_values()
-        except Exception as e:
-            self.logger.error(f"Error retrieving data from sheet: {e}")
-            return []
+    def parse_html(self, html):
+        """
+        Parse HTML content with BeautifulSoup.
         
-    def insert_rows(self, rows, start_row=2):
-        """Insert rows at a specific position in the sheet"""
-        try:
-            # Insert rows at the specified position
-            self.sheet.insert_rows(rows, start_row)
-            self.logger.info(f"Inserted {len(rows)} rows at position {start_row}")
-            return True
-        except gspread.exceptions.APIError as e:
-            # Handle token expiration specifically
-            if e.response.status_code == 401:  # Unauthorized, likely expired token
-                self.logger.info("Refreshing credentials and retrying...")
-                self.creds.refresh(None)
-                self.client = gspread.authorize(self.creds)
-                self.spreadsheet = self.client.open(self.sheet_name)
-                self.sheet = self.spreadsheet.sheet1
-                # Try again with fresh credentials
-                self.sheet.insert_rows(rows, start_row)
-                return True
-            else:
-                raise
-        except Exception as e:
-            self.logger.error(f"Error inserting rows in sheet: {e}")
-            # Print detailed error for debugging
-            import traceback
-            self.logger.error(traceback.format_exc())
-            return False
+        Args:
+            html (str): HTML content
+            
+        Returns:
+            BeautifulSoup: Parsed HTML
+        """
+        return BeautifulSoup(html, 'html.parser')
+    
+    def extract_text(self, element):
+        """
+        Safely extract text from a BeautifulSoup element.
         
-    def clear_sheet(self, preserve_header=True):
-        """Clear all data from the sheet"""
-        try:
-            # Get the dimensions of the sheet
-            if preserve_header:
-                # Clear everything except the header row
-                rows = len(self.sheet.get_all_values())
-                if rows > 1:
-                    range_name = f"A2:Z{rows}"
-                    self.sheet.batch_clear([range_name])
-            else:
-                # Clear everything
-                self.sheet.clear()
-            return True
-        except Exception as e:
-            self.logger.error(f"Error clearing sheet: {e}")
-            return False
+        Args:
+            element: BeautifulSoup element
+            
+        Returns:
+            str: Extracted text or empty string
+        """
+        return element.get_text(strip=True) if element else ""
+    
+    def simple_sentiment_analysis(self, text):
+        """
+        Perform a simple rule-based sentiment analysis.
+        
+        Args:
+            text (str): Text to analyze
+            
+        Returns:
+            float: Sentiment score (-1.0 to 1.0)
+        """
+        if not text:
+            return 0.0
+            
+        # Simple lists of positive and negative words
+        positive_words = [
+            'good', 'great', 'excellent', 'amazing', 'awesome', 'fantastic',
+            'wonderful', 'best', 'love', 'happy', 'helpful', 'useful', 'recommend',
+            'positive', 'success', 'successful', 'beneficial', 'effective',
+            'impressive', 'innovative', 'outstanding', 'perfect', 'brilliant',
+            'excited', 'exciting', 'enjoy', 'enjoyed', 'interesting', 'valuable',
+            'favorite', 'thanks', 'thank', 'appreciation', 'appreciate', 'win',
+            'winning', 'winner', 'improvement', 'improve', 'improved'
+        ]
+        
+        negative_words = [
+            'bad', 'terrible', 'awful', 'horrible', 'poor', 'disappointing',
+            'disappointed', 'hate', 'dislike', 'worst', 'waste', 'useless',
+            'negative', 'fail', 'failure', 'problem', 'issue', 'trouble',
+            'difficult', 'hard', 'complicated', 'confusing', 'confused',
+            'annoying', 'annoyed', 'frustrated', 'frustrating', 'sad',
+            'unhappy', 'angry', 'broke', 'broken', 'expensive', 'overpriced',
+            'avoid', 'avoid', 'sucks', 'suck', 'stupid', 'ridiculous'
+        ]
+        
+        text_lower = text.lower()
+        words = text_lower.split()
+        
+        # Count positive and negative words
+        positive_count = sum(1 for word in words if word in positive_words)
+        negative_count = sum(1 for word in words if word in negative_words)
+        
+        # Calculate total words (excluding very short words)
+        total_words = len([word for word in words if len(word) > 2])
+        
+        if total_words == 0:
+            return 0.0
+            
+        # Calculate sentiment score
+        sentiment_score = (positive_count - negative_count) / (total_words ** 0.5)
+        
+        # Clamp score between -1 and 1
+        return max(min(sentiment_score, 1.0), -1.0)
